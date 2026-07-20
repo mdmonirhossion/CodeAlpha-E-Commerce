@@ -119,7 +119,7 @@ const initSeeds = async () => {
           description: 'Made from full-grain vegetable-tanned leather, this slim bi-fold wallet has RFID-blocking layers, 6 card slots, and a bill compartment that patinas beautifully over time.',
           price: 45.00,
           category: 'Accessories',
-          image_url: 'https://images.unsplash.com/photo-1627124718515-e23e7102dbdb?w=600&q=80',
+          image_url: 'https://i.ibb.co.com/0R4ZVw9j/Handcrafted-Leather-Wallet.webp',
           stock: 50,
           rating: 4.9
         },

@@ -86,7 +86,7 @@ cd simple-ecommerce
 3.  Set up environment variables:
     Create a `.env` file in the `backend/` directory or make sure to provide the required environment variables:
     *   `PORT` (Default: `5000`)
-    *   `MONGODB_URI` (Already configured in [db.js](file:///c:/Users/DELL/.gemini/antigravity-ide/scratch/simple-ecommerce/backend/db.js) but can be overridden)
+    *   `MONGODB_URI` (Already configured in [db.js]() but can be overridden)
 4.  Start the development server:
     ```bash
     npm run dev
