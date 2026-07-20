@@ -12,7 +12,7 @@ import {
 
 const AuthContext = createContext(null);
 
-export const API_URL = 'http://localhost:5000/api';
+export const API_URL = 'https://simple-ecommerce-back-api.vercel.app/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -96,7 +96,7 @@ export const AuthProvider = ({ children }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       // Update displayName in Firebase Auth Profile
       await updateProfile(userCredential.user, { displayName: name });
-      
+
       const idToken = await userCredential.user.getIdToken(true);
       localStorage.setItem('token', idToken);
       setToken(idToken);
