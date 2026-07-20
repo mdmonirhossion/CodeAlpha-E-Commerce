@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = 'mongodb+srv://Monir:jN2xXp009N0LkviU@ecotrack-server.pnvhcn2.mongodb.net/simple-ecommerce?retryWrites=true&w=majority&appName=Ecotrack-server';
+const MONGODB_URI = 'mongodb+srv://Monir:L3rOsjGf88vPYSeH@ecotrack-server.pnvhcn2.mongodb.net/simple-ecommerce?retryWrites=true&w=majority&appName=Ecotrack-server';
 
 export const connectDB = async () => {
   try {
