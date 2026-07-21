@@ -29,6 +29,9 @@ const corsOptions = {
   credentials: true,
 };
 
+// Favicon 404 Error Handler (No Content Response)
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // Handle preflight OPTIONS requests for ALL routes BEFORE any other middleware
 app.options('*', cors(corsOptions));
 
@@ -36,8 +39,36 @@ app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Connect to MongoDB Atlas
-connectDB();
+// Request logger for Vercel console debugging
+app.use((req, res, next) => {
+  console.log(`[Vercel Serverless Log] ${req.method} ${req.url}`);
+  next();
+});
+
+// Connect to MongoDB Atlas (background pre-warm)
+connectDB().catch(err => console.error('Database connection pre-warm failed:', err.message));
+
+// Inline Database Connection Middleware (guarantees DB is ready before request reaches handlers)
+const dbMiddleware = async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('Database connection middleware error:', err);
+    res.status(500).json({ message: 'Database connection failed.' });
+  }
+};
+
+// Rewrite URLs that do not start with /api to prepend /api (except root path)
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api') && req.url !== '/' && !req.url.startsWith('/api/')) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
+
+// Ensure database connection is resolved before handling any request
+app.use(dbMiddleware);
 
 // --- AUTHENTICATION SYNC ---
 
@@ -351,6 +382,19 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     console.error('Place order error:', error);
     res.status(500).json({ message: 'Internal server error placing order.', error: error.message });
   }
+});
+
+// Root API info route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to the E-Commerce API! All endpoints are available at /api',
+    endpoints: {
+      products: '/api/products',
+      cart: '/api/cart',
+      orders: '/api/orders',
+      auth: '/api/auth/me'
+    }
+  });
 });
 
 // Fallback route

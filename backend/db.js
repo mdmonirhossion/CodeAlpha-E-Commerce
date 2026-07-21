@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = 'mongodb+srv://Monir:L3rOsjGf88vPYSeH@ecotrack-server.pnvhcn2.mongodb.net/simple-ecommerce?retryWrites=true&w=majority&appName=Ecotrack-server';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://Monir:L3rOsjGf88vPYSeH@ecotrack-server.pnvhcn2.mongodb.net/simple-ecommerce?retryWrites=true&w=majority&appName=Ecotrack-server';
 
 // Cache the connection for Vercel serverless (prevents re-connecting on every warm invocation)
 let cached = global.mongoose;
@@ -10,20 +10,19 @@ if (!cached) {
 
 export const connectDB = async () => {
   // If already connected, reuse the existing connection
-  if (cached.conn) {
-    return cached.conn;
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
   }
 
   // If no pending connection, create one
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false,
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
     };
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+    cached.promise = mongoose.connect(MONGODB_URI, opts).then((m) => {
       console.log('Successfully connected to MongoDB Atlas.');
-      return mongoose;
+      return m;
     });
   }
 
@@ -181,7 +180,7 @@ const initSeeds = async () => {
           rating: 4.7
         },
         {
-          name: 'Levi's 511 Slim Fit Jeans'
+          name: "Levi's 511 Slim Fit Jeans",
           description: 'The perfect slim — sits below the waist, slim through hip and thigh, with a narrow leg opening. Made from flexible stretch denim for all-day comfort. Classic 5-pocket styling.',
           price: 59.99,
           category: 'Fashion',
