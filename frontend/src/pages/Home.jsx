@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { API_URL } from '../context/AuthContext';
 import ProductCard from '../components/ProductCard';
@@ -11,11 +11,11 @@ const Home = () => {
   useEffect(() => {
     const fetchLatestProducts = async () => {
       try {
-        const res = await fetch(`${API_URL}/products?sort=latest`);
+        const res = await fetch(`${API_URL}/products?sort=latest&limit=8`);
         if (res.ok) {
           const data = await res.json();
-          // Take top 4 for the home page
-          setProducts(data.slice(0, 4));
+          // API now returns { products, total, hasMore } — extract the array
+          setProducts(Array.isArray(data) ? data : (data.products || []));
         }
       } catch (err) {
         console.error('Error fetching products:', err);
@@ -107,9 +107,9 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Featured/Latest Products Grid */}
-      <section className="space-y-6 max-w-7xl mx-auto px-2">
-        <div className="flex justify-between items-end">
+      {/* Infinite Scrolling Product Carousel */}
+      <section className="space-y-6 max-w-full">
+        <div className="flex justify-between items-end max-w-7xl mx-auto px-2">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-primary font-bold text-sm uppercase tracking-wider">
               <FiTrendingUp /> Trending Now
@@ -121,20 +121,41 @@ const Home = () => {
           </Link>
         </div>
 
+        <style>{`
+          @keyframes marquee-scroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+          .marquee-track {
+            animation: marquee-scroll 28s linear infinite;
+            display: flex;
+            width: max-content;
+          }
+          .marquee-wrapper:hover .marquee-track {
+            animation-play-state: paused;
+          }
+        `}</style>
+
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="flex gap-6 overflow-hidden px-2">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="card bg-base-200 h-80 animate-pulse rounded-2xl"></div>
+              <div key={i} className="card bg-base-200 h-80 w-72 shrink-0 animate-pulse rounded-2xl"></div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {products.map(product => (
-              <ProductCard key={product._id} product={product} />
-            ))}
+          <div className="marquee-wrapper overflow-hidden w-full py-2">
+            <div className="marquee-track gap-6 px-4">
+              {/* Render products twice for seamless infinite loop */}
+              {[...products, ...products].map((product, idx) => (
+                <div key={`${product._id}-${idx}`} className="w-72 shrink-0">
+                  <ProductCard product={product} />
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>
+
 
       {/* Promotion banner block */}
       <section className="relative bg-neutral rounded-3xl text-neutral-content p-8 md:p-12 overflow-hidden flex flex-col md:flex-row justify-between items-center gap-8 max-w-7xl mx-auto px-6 border border-gray-800">

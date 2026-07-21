@@ -6,7 +6,34 @@ import { authenticateToken, requireAdmin } from './auth.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// Explicitly whitelist the deployed frontend origin so Vercel serverless
+// correctly handles both simple requests AND preflight OPTIONS requests.
+const ALLOWED_ORIGINS = [
+  'https://simple-ecommerce-front-site.vercel.app', // production frontend
+  'http://localhost:5173',                           // local Vite dev server
+  'http://localhost:3000',                           // fallback local port
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. curl, Postman, server-to-server)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: origin '${origin}' is not allowed`));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+
+// Handle preflight OPTIONS requests for ALL routes BEFORE any other middleware
+app.options('*', cors(corsOptions));
+
+// Apply CORS to every subsequent request
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Connect to MongoDB Atlas
@@ -22,10 +49,18 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // --- PRODUCT ROUTES ---
 
-// Get all products (with search, category, sort, and price range filters)
+// Get products with pagination, search, category, sort, and price range filters.
+// Query params: page (default 1), limit (default 8), search, category, sort, min_price, max_price
+// Response: { products, total, hasMore }
 app.get('/api/products', async (req, res) => {
   const { search, category, sort, min_price, max_price } = req.query;
 
+  // --- Pagination params ---
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.max(1, parseInt(req.query.limit) || 8);
+  const skip  = (page - 1) * limit;
+
+  // --- Build filter object (same logic as before) ---
   let filter = {};
 
   if (category && category !== 'All') {
@@ -34,7 +69,7 @@ app.get('/api/products', async (req, res) => {
 
   if (search) {
     filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
+      { name:        { $regex: search, $options: 'i' } },
       { description: { $regex: search, $options: 'i' } }
     ];
   }
@@ -46,21 +81,30 @@ app.get('/api/products', async (req, res) => {
   }
 
   try {
-    let query = Product.find(filter);
+    // --- Build sorted query then apply skip + limit ---
+    let baseQuery = Product.find(filter);
 
-    // Sorting
     if (sort === 'price-low') {
-      query = query.sort({ price: 1 });
+      baseQuery = baseQuery.sort({ price: 1 });
     } else if (sort === 'price-high') {
-      query = query.sort({ price: -1 });
+      baseQuery = baseQuery.sort({ price: -1 });
     } else if (sort === 'rating') {
-      query = query.sort({ rating: -1 });
+      baseQuery = baseQuery.sort({ rating: -1 });
     } else {
-      query = query.sort({ created_at: -1 });
+      // Default: newest first (uses compound index { category, created_at })
+      baseQuery = baseQuery.sort({ created_at: -1 });
     }
 
-    const products = await query;
-    res.json(products);
+    // Run paginated fetch and total count in parallel for best performance
+    const [products, total] = await Promise.all([
+      baseQuery.skip(skip).limit(limit),
+      Product.countDocuments(filter)
+    ]);
+
+    // hasMore = true when there are still products beyond this page
+    const hasMore = skip + products.length < total;
+
+    res.json({ products, total, hasMore });
   } catch (error) {
     console.error('Get products error:', error);
     res.status(500).json({ message: 'Internal server error fetching products.' });
