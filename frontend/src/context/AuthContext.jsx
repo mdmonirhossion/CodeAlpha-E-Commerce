@@ -12,7 +12,7 @@ import {
 
 const AuthContext = createContext(null);
 
-export const API_URL = 'https://simple-ecommerce-back-api.vercel.app/api';
+export const API_URL = 'https://simple-ecommerce-back-api-mdmonirhossion2002-8639s-projects.vercel.app/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
