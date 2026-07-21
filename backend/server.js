@@ -1,10 +1,19 @@
 import express from 'express';
 import cors from 'cors';
+import mongoose from 'mongoose';
 import { connectDB, Product, User, Order } from './db.js';
 import { authenticateToken, requireAdmin } from './auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Helper to query products with mixed ID types (String and ObjectId)
+const getProductQueryById = (id) => {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    return { _id: { $in: [id, new mongoose.Types.ObjectId(id)] } };
+  }
+  return { _id: id };
+};
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 // Explicitly whitelist the deployed frontend origin so Vercel serverless
@@ -95,7 +104,8 @@ app.get('/api/products', async (req, res) => {
   let filter = {};
 
   if (category && category !== 'All') {
-    filter.category = category;
+    const cleanCategory = category.replace(/s$/i, '');
+    filter.category = { $regex: new RegExp(`^${cleanCategory}s?$`, 'i') };
   }
 
   if (search) {
@@ -132,20 +142,24 @@ app.get('/api/products', async (req, res) => {
       Product.countDocuments(filter)
     ]);
 
+    if (!products || products.length === 0) {
+      return res.status(200).json({ products: [], total: 0, hasMore: false });
+    }
+
     // hasMore = true when there are still products beyond this page
     const hasMore = skip + products.length < total;
 
-    res.json({ products, total, hasMore });
+    res.status(200).json({ products, total, hasMore });
   } catch (error) {
     console.error('Get products error:', error);
-    res.status(500).json({ message: 'Internal server error fetching products.' });
+    res.status(200).json({ products: [], total: 0, hasMore: false });
   }
 });
 
 // Get single product
 app.get('/api/products/:id', async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findOne(getProductQueryById(req.params.id));
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' });
     }
@@ -226,7 +240,7 @@ app.post('/api/cart', authenticateToken, async (req, res) => {
 
   try {
     // Check product stock
-    const product = await Product.findById(product_id);
+    const product = await Product.findOne(getProductQueryById(product_id));
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' });
     }
@@ -261,7 +275,7 @@ app.delete('/api/cart/:product_id', authenticateToken, async (req, res) => {
     }
 
     const initialLength = user.cart.length;
-    user.cart = user.cart.filter(item => item.product_id.toString() !== req.params.product_id);
+    user.cart = user.cart.filter(item => item.product_id && item.product_id.toString() !== req.params.product_id);
 
     if (user.cart.length === initialLength) {
       return res.status(404).json({ message: 'Item not found in cart.' });
@@ -289,7 +303,7 @@ app.get('/api/orders', authenticateToken, async (req, res) => {
     // Format output
     const formattedOrders = ordersList.map(order => {
       const items = order.items
-        .filter(item => item.product_id !== null)
+        .filter(item => item.product_id && typeof item.product_id === 'object' && item.product_id._id)
         .map(item => ({
           id: item._id,
           product_id: item.product_id._id,
@@ -335,6 +349,9 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     // 1. Validate stock
     for (let item of user.cart) {
       const product = item.product_id;
+      if (!product || typeof product !== 'object' || !product._id) {
+        return res.status(400).json({ message: 'Invalid product in cart. Please remove it and try again.' });
+      }
       if (product.stock < item.quantity) {
         return res.status(400).json({
           message: `Insufficient stock for '${product.name}'. Only ${product.stock} left. Please adjust cart.`
@@ -363,7 +380,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 
     // 4. Deduct Stock & Update Products
     for (let item of user.cart) {
-      await Product.findByIdAndUpdate(item.product_id._id, {
+      await Product.findOneAndUpdate(getProductQueryById(item.product_id._id), {
         $inc: { stock: -item.quantity }
       });
     }

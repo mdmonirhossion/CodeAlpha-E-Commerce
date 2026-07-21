@@ -49,7 +49,7 @@ const UserSchema = new Schema({
   role: { type: String, default: 'user', enum: ['user', 'admin'] },
   cart: [
     {
-      product_id: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+      product_id: { type: Schema.Types.Mixed, ref: 'Product', required: true },
       quantity: { type: Number, required: true, default: 1 }
     }
   ],
@@ -58,6 +58,7 @@ const UserSchema = new Schema({
 
 // Product Schema
 const ProductSchema = new Schema({
+  _id: { type: Schema.Types.Mixed },
   name: { type: String, required: true },
   description: { type: String, required: true },
   price: { type: Number, required: true },
@@ -83,7 +84,7 @@ const OrderSchema = new Schema({
   order_status: { type: String, default: 'Pending' },
   items: [
     {
-      product_id: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+      product_id: { type: Schema.Types.Mixed, ref: 'Product', required: true },
       quantity: { type: Number, required: true },
       price: { type: Number, required: true }
     }
