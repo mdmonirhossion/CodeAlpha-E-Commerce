@@ -91,7 +91,7 @@ export const authenticateToken = async (req, res, next) => {
     let dbUser = await User.findById(decodedToken.uid);
     if (!dbUser) {
       // Parse a fallback display name if not available
-      const displayName = decodedToken.name || decodedToken.email.split('@')[0];
+      const displayName = decodedToken.name || (decodedToken.email ? decodedToken.email.split('@')[0] : 'User');
       dbUser = await User.create({
         _id: decodedToken.uid,
         name: displayName,
@@ -125,7 +125,7 @@ const decodeJWTInsecure = (token) => {
     return {
       uid: payload.sub,
       email: payload.email,
-      name: payload.name || payload.email ? payload.email.split('@')[0] : 'User'
+      name: payload.name || (payload.email ? payload.email.split('@')[0] : 'User')
     };
   } catch (e) {
     console.error('Failed to parse JWT payload:', e.message);
