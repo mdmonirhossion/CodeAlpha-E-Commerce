@@ -207,12 +207,22 @@ app.get('/api/cart', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    // Map Mongoose populate result into uniform schema output
-    const cartItems = user.cart
-      .filter(item => item.product_id !== null) // Filter out deleted products
-      .map(item => {
-        const p = item.product_id;
-        return {
+    const cartItems = [];
+    const updatedCart = [];
+    let cartChanged = false;
+
+    for (let item of user.cart) {
+      let p = item.product_id;
+      // Fallback manual resolution if populate failed
+      if (!p || typeof p !== 'object' || !p._id) {
+        const rawId = p?._id || p;
+        if (rawId) {
+          p = await Product.findOne(getProductQueryById(rawId.toString()));
+        }
+      }
+
+      if (p) {
+        cartItems.push({
           id: item._id,
           product_id: p._id,
           name: p.name,
@@ -220,8 +230,17 @@ app.get('/api/cart', authenticateToken, async (req, res) => {
           image_url: p.image_url,
           stock: p.stock,
           quantity: item.quantity
-        };
-      });
+        });
+        updatedCart.push(item);
+      } else {
+        cartChanged = true;
+      }
+    }
+
+    if (cartChanged) {
+      user.cart = updatedCart;
+      await user.save();
+    }
 
     res.json(cartItems);
   } catch (error) {
@@ -346,21 +365,49 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'Cannot place order. Shopping cart is empty.' });
     }
 
-    // 1. Validate stock
+    // 1. Resolve and Validate products for all cart items
+    const resolvedCart = [];
+    const updatedCart = [];
+    let cartChanged = false;
+
     for (let item of user.cart) {
-      const product = item.product_id;
+      let product = item.product_id;
+      // Fallback manual resolution if populate failed
       if (!product || typeof product !== 'object' || !product._id) {
-        return res.status(400).json({ message: 'Invalid product in cart. Please remove it and try again.' });
+        const rawId = product?._id || product;
+        if (rawId) {
+          product = await Product.findOne(getProductQueryById(rawId.toString()));
+        }
       }
-      if (product.stock < item.quantity) {
-        return res.status(400).json({
-          message: `Insufficient stock for '${product.name}'. Only ${product.stock} left. Please adjust cart.`
+
+      if (product) {
+        if (product.stock < item.quantity) {
+          return res.status(400).json({
+            message: `Insufficient stock for '${product.name}'. Only ${product.stock} left. Please adjust cart.`
+          });
+        }
+
+        resolvedCart.push({
+          item,
+          product
         });
+        updatedCart.push(item);
+      } else {
+        cartChanged = true;
       }
     }
 
+    if (cartChanged) {
+      user.cart = updatedCart;
+      await user.save();
+    }
+
+    if (resolvedCart.length === 0) {
+      return res.status(400).json({ message: 'Cannot place order. Shopping cart is empty.' });
+    }
+
     // 2. Calculate totals
-    let totalAmount = user.cart.reduce((sum, item) => sum + (item.product_id.price * item.quantity), 0);
+    let totalAmount = resolvedCart.reduce((sum, entry) => sum + (entry.product.price * entry.item.quantity), 0);
 
     // 3. Create Order
     const newOrder = new Order({
@@ -369,19 +416,19 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
       shipping_address,
       payment_status: 'Paid',
       order_status: 'Processing',
-      items: user.cart.map(item => ({
-        product_id: item.product_id._id,
-        quantity: item.quantity,
-        price: item.product_id.price
+      items: resolvedCart.map(entry => ({
+        product_id: entry.product._id,
+        quantity: entry.item.quantity,
+        price: entry.product.price
       }))
     });
 
     const savedOrder = await newOrder.save();
 
     // 4. Deduct Stock & Update Products
-    for (let item of user.cart) {
-      await Product.findOneAndUpdate(getProductQueryById(item.product_id._id), {
-        $inc: { stock: -item.quantity }
+    for (let entry of resolvedCart) {
+      await Product.findOneAndUpdate(getProductQueryById(entry.product._id), {
+        $inc: { stock: -entry.item.quantity }
       });
     }
 
